@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor e Inspector de Markdown a HTML</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Marked.js para conversión de Markdown a HTML -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Prism.js para resaltado de código -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorr.min.css" rel="stylesheet" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Estilos base para el área visual formateada */
+        .prose-preview h1 { font-size: 2rem; font-weight: 800; margin-top: 1rem; margin-bottom: 0.5rem; line-height: 1.25; }
+        .prose-preview h2 { font-size: 1.5rem; font-weight: 700; margin-top: 0.875rem; margin-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.25rem; }
+        .dark .prose-preview h2 { border-color: #374151; }
+        .prose-preview h3 { font-size: 1.25rem; font-weight: 600; margin-top: 0.75rem; margin-bottom: 0.25rem; }
+        .prose-preview p { margin-bottom: 0.75rem; line-height: 1.625; }
+        .prose-preview strong { font-weight: 700; }
+        .prose-preview em { font-style: italic; }
+        .prose-preview del { text-decoration: line-through; }
+        .prose-preview ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 0.75rem; }
+        .prose-preview ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 0.75rem; }
+        .prose-preview blockquote { border-left: 4px solid #0ea5e9; padding-left: 1rem; font-style: italic; color: #4b5563; margin: 0.75rem 0; }
+        .dark .prose-preview blockquote { color: #9ca3af; }
+        .prose-preview code { background-color: rgba(14, 165, 233, 0.1); color: #0284c7; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.875em; }
+        .dark .prose-preview code { color: #38bdf8; background-color: rgba(56, 189, 248, 0.15); }
+        .prose-preview pre { background-color: #1e293b; color: #f8fafc; padding: 0.75rem 1rem; border-radius: 0.5rem; overflow-x: auto; margin-bottom: 0.75rem; }
+        .prose-preview pre code { background-color: transparent; color: inherit; padding: 0; }
+        .prose-preview a { color: #0284c7; text-decoration: underline; }
+        .dark .prose-preview a { color: #38bdf8; }
+        .prose-preview table { width: 100%; border-collapse: collapse; margin-bottom: 0.75rem; }
+        .prose-preview th, .prose-preview td { border: 1px solid #d1d5db; padding: 0.5rem 0.75rem; text-align: left; }
+        .dark .prose-preview th, .dark .prose-preview td { border-color: #374151; }
+        .prose-preview th { background-color: #f3f4f6; font-weight: 600; }
+        .dark .prose-preview th { background-color: #1f2937; }
+
+        /* Ocultar scrollbars por defecto pero mantener la funcionalidad */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 h-full flex flex-col font-sans transition-colors duration-200">
+
+    <!-- Toast de Notificaciones -->
+    <div id="toast" class="fixed bottom-4 right-4 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-2 text-sm font-medium">
+        <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400 dark:text-emerald-600"></i>
+        <span id="toast-message">Texto copiado al portapapeles</span>
+    </div>
+
+    <!-- Encabezado de la Aplicación -->
+    <header class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-3 flex-none">
+        <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
+            <!-- Título y Marca -->
+            <div class="flex items-center gap-3">
+                <div class="bg-brand-500 text-white p-2 rounded-xl shadow-md">
+                    <i data-lucide="code-2" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg leading-tight flex items-center gap-2">
+                        MarkTranslate
+                        <span class="text-xs bg-brand-100 dark:bg-brand-900/50 text-brand-700 dark:text-brand-300 font-medium px-2 py-0.5 rounded-full">Interactive</span>
+                    </h1>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Traductor visual de Sintaxis Markdown a HTML en vivo</p>
+                </div>
+            </div>
+
+            <!-- Controles centralizados y cambio de vista -->
+            <div class="flex items-center gap-2 bg-slate-100 dark:bg-slate-900 p-1 rounded-xl text-xs font-medium">
+                <button id="btn-view-split" onclick="setViewMode('split')" class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all bg-white dark:bg-slate-800 shadow-sm text-brand-600 dark:text-brand-400">
+                    <i data-lucide="columns" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Vista Dividida</span>
+                </button>
+                <button id="btn-view-triple" onclick="setViewMode('triple')" class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white">
+                    <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Inspector 3 Paneles</span>
+                </button>
+            </div>
+
+            <!-- Acciones de plantilla y Modo Oscuro -->
+            <div class="flex items-center gap-2">
+                <select id="template-select" onchange="loadTemplate(this.value)" class="bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs rounded-xl px-3 py-2 border-0 outline-none cursor-pointer focus:ring-2 focus:ring-brand-500 font-medium">
+                    <option value="" disabled selected>Cargar plantilla...</option>
+                    <option value="basic">Ejemplo Básico</option>
+                    <option value="syntax">Guía de Sintaxis</option>
+                    <option value="tables">Tablas y Listas</option>
+                </select>
+
+                <button onclick="toggleDarkMode()" class="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors" title="Cambiar Tema">
+                    <i data-lucide="sun" class="w-4 h-4 hidden dark:block"></i>
+                    <i data-lucide="moon" class="w-4 h-4 block dark:hidden"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Barra de Herramientas de Formato -->
+    <div class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-2 flex flex-wrap items-center gap-1 flex-none overflow-x-auto custom-scrollbar">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider mr-2 hidden md:inline">Herramientas:</span>
+        <button onclick="insertFormat('bold')" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Negrita (**texto**)">
+            <i data-lucide="bold" class="w-4 h-4"></i>
+        </button>
+        <button onclick="insertFormat('italic')" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Cursiva (*texto*)">
+            <i data-lucide="italic" class="w-4 h-4"></i>
+        </button>
+        <button onclick="insertFormat('strikethrough')" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Tachado (~~texto~~)">
+            <i data-lucide="strikethrough" class="w-4 h-4"></i>
+        </button>
+        <div class="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-1"></div>
+        <button onclick="insertFormat('h1')" class="px-2 py-1 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Encabezado H1">
+            H1
+        </button>
+        <button onclick="insertFormat('h2')" class="px-2 py-1 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Encabezado H2">
+            H2
+        </button>
+        <button onclick="insertFormat('h3')" class="px-2 py-1 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Encabezado H3">
+            H3
+        </button>
+        <div class="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-1"></div>
+        <button onclick="insertFormat('link')" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Enlace [texto](url)">
+            <i data-lucide="link" class="w-4 h-4"></i>
+        </button>
+        <button onclick="insertFormat('quote')" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Cita (> texto)">
+            <i data-lucide="quote" class="w-4 h-4"></i>
+        </button>
+        <button onclick="insertFormat('code')" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Bloque de Código (```)">
+            <i data-lucide="code" class="w-4 h-4"></i>
+        </button>
+        <button onclick="insertFormat('ul')" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Lista Viñetas (- ítem)">
+            <i data-lucide="list" class="w-4 h-4"></i>
+        </button>
+        <button onclick="insertFormat('ol')" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Lista Numerada (1. ítem)">
+            <i data-lucide="list-ordered" class="w-4 h-4"></i>
+        </button>
+        <button onclick="insertFormat('table')" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-300 transition-colors" title="Insertar Tabla">
+            <i data-lucide="table" class="w-4 h-4"></i>
+        </button>
+        
+        <div class="ml-auto flex items-center gap-2">
+            <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs text-slate-500 dark:text-slate-400 select-none">
+                <input type="checkbox" id="sync-scroll-toggle" checked class="rounded border-slate-300 text-brand-600 focus:ring-brand-500">
+                <span>Scroll Sincronizado</span>
+            </label>
+        </div>
+    </div>
+
+    <!-- Área Principal de Paneles de Trabajo -->
+    <main class="flex-1 overflow-hidden p-3 md:p-4">
+        <div id="panels-container" class="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
+            
+            <!-- PANEL 1: Editor Markdown (Entrada con Sintaxis) -->
+            <div class="flex flex-col bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                <div class="bg-slate-100/70 dark:bg-slate-700/50 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center flex-none">
+                    <span class="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                        <i data-lucide="edit-3" class="w-4 h-4 text-brand-500"></i>
+                        CÓDIGO SINTAXIS (MARKDOWN)
+                    </span>
+                    <button onclick="copyToClipboard(document.getElementById('markdown-input').value, 'Markdown')" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1" title="Copiar Markdown">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div class="flex-1 relative">
+                    <textarea id="markdown-input" 
+                        class="w-full h-full p-4 font-mono text-sm bg-transparent text-slate-800 dark:text-slate-100 outline-none resize-none custom-scrollbar border-0 focus:ring-0" 
+                        placeholder="Escribe aquí sintaxis como **negrita**, *cursiva*, # Encabezados..."
+                        spellcheck="false"></textarea>
+                </div>
+            </div>
+
+            <!-- PANEL 2: Inspector de Código HTML Generado (Visible en modo Triple o por alternancia) -->
+            <div id="html-panel" class="hidden flex-col bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                <div class="bg-slate-100/70 dark:bg-slate-700/50 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center flex-none">
+                    <span class="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                        <i data-lucide="file-code-2" class="w-4 h-4 text-amber-500"></i>
+                        TRADUCCIÓN A HTML (INFORMATICA)
+                    </span>
+                    <button onclick="copyToClipboard(htmlOutputCode, 'Código HTML')" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1" title="Copiar HTML">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div id="html-container" class="flex-1 p-4 overflow-auto custom-scrollbar font-mono text-xs bg-slate-900 text-slate-100">
+                    <pre class="m-0"><code id="html-preview-code" class="language-markup"></code></pre>
+                </div>
+            </div>
+
+            <!-- PANEL 3: Vista Previa Visual Rendereada -->
+            <div id="preview-panel" class="flex flex-col bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden shadow-sm">
+                <div class="bg-slate-100/70 dark:bg-slate-700/50 px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center flex-none">
+                    <span class="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                        <i data-lucide="eye" class="w-4 h-4 text-emerald-500"></i>
+                        VISTA PREVIA VISUAL (RESULTADO FINAL)
+                    </span>
+                    <button onclick="copyRichText()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors p-1" title="Copiar como Texto Enriquecido">
+                        <i data-lucide="copy" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div id="visual-preview-container" class="flex-1 p-6 overflow-auto custom-scrollbar prose-preview text-slate-800 dark:text-slate-100">
+                    <!-- Aquí se renderiza el resultado visual -->
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Barra Inferior de Información y Ayuda de Equivalencia -->
+    <footer class="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-4 py-2 flex-none text-xs text-slate-500 dark:text-slate-400 flex flex-wrap justify-between items-center gap-2">
+        <div id="equivalency-info" class="flex items-center gap-2">
+            <span class="font-medium text-slate-600 dark:text-slate-300">Equivalencia rápida:</span>
+            <span class="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded font-mono text-slate-700 dark:text-slate-300">**texto**</span>
+            <span>&rarr;</span>
+            <span class="bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded font-mono text-amber-600 dark:text-amber-400">&lt;strong&gt;</span>
+            <span>&rarr;</span>
+            <strong class="text-slate-800 dark:text-white">texto en negrita</strong>
+        </div>
+        <div class="flex items-center gap-4">
+            <span id="char-count">0 caracteres</span>
+            <span id="word-count">0 palabras</span>
+        </div>
+    </footer>
+
+    <!-- Scripts de Lógica y Eventos -->
+    <script>
+        // Variables globales de Estado
+        let htmlOutputCode = "";
+        let currentViewMode = 'split'; // 'split' o 'triple'
+        let isSyncScrollActive = true;
+
+        // Elementos del DOM
+        const markdownInput = document.getElementById('markdown-input');
+        const visualPreviewContainer = document.getElementById('visual-preview-container');
+        const htmlPreviewCode = document.getElementById('html-preview-code');
+        const htmlContainer = document.getElementById('html-container');
+        const panelsContainer = document.getElementById('panels-container');
+        const htmlPanel = document.getElementById('html-panel');
+        const syncScrollToggle = document.getElementById('sync-scroll-toggle');
+
+        // Plantillas Predefinidas de ejemplo
+        const templates = {
+            basic: `# ¡Bienvenido a MarkTranslate!
+
+Este es un **editor interactivo** para ver cómo la *sintaxis informática* se traduce a lenguaje HTML y a texto formateado.
+
+## ¿Cómo funciona la negrita?
+Cuando pones dos asteriscos como \`**este texto**\`, la herramienta lo convierte automáticamente en:
+- En HTML: \`<strong>este texto</strong>\`
+- Visualmente: **este texto**
+
+### Prueba tú mismo
+1. Modifica cualquier palabra de este panel.
+2. Observa el resultado visual a la derecha.
+3. Activa la **vista de 3 paneles** arriba para ver también el código HTML.`,
+
+            syntax: `# Guía Rápida de Sintaxis Markdown
+
+## Texto Formateado
+- **Texto en Negrita** (` + `**Negrita**` + `)
+- *Texto en Cursiva* (` + `*Cursiva*` + `)
+- ~~Texto Tachado~~ (` + `~~Tachado~~` + `)
+
+## Encabezados (HTML h1, h2, h3)
+# Encabezado 1 (<h1>)
+## Encabezado 2 (<h2>)
+### Encabezado 3 (<h3>)
+
+## Citas y Código
+> "La simplicidad es la máxima sofisticación." - Leonardo da Vinci
+
+Código en línea: \`const saludo = "Hola mundo";\`
+
+## Enlaces
+[Haz clic aquí para ir a Google](https://www.google.com)`,
+
+            tables: `# Ejemplo de Tabla y Listas
+
+## Lista Ordenada
+1. Primer paso
+2. Segundo paso
+3. Tercer paso
+
+## Tabla Comparativa
+
+| Sintaxis Markdown | Equivalente HTML | Resultado Visual |
+| :--- | :--- | :--- |
+| \`**Negrita**\` | \`<strong>\` | **Negrita** |
+| \`*Cursiva*\` | \`<em>\` | *Cursiva* |
+| \`# Título\` | \`<h1>\` | Título |
+
+*Pasa el ratón sobre los botones de arriba para insertar más elementos.*`
+        };
+
+        // Inicialización al cargar
+        window.onload = () => {
+            // Configurar Marked.js
+            marked.setOptions({
+                breaks: true,
+                gfm: true
+            });
+
+            // Cargar plantilla por defecto
+            markdownInput.value = templates.basic;
+            updatePreview();
+            
+            // Inicializar Lucide Icons
+            lucide.createIcons();
+
+            // Sincronizar scroll
+            setupScrollSync();
+        };
+
+        // Listener de entrada en tiempo real
+        markdownInput.addEventListener('input', () => {
+            updatePreview();
+        });
+
+        // Actualizar vistas (Visual e HTML)
+        function updatePreview() {
+            const rawMarkdown = markdownInput.value;
+            
+            // Renderizar Markdown a HTML
+            const parsedHtml = marked.parse(rawMarkdown);
+            htmlOutputCode = parsedHtml;
+
+            // Actualizar panel visual
+            visualPreviewContainer.innerHTML = parsedHtml;
+
+            // Actualizar panel de código HTML resaltado
+            htmlPreviewCode.textContent = parsedHtml;
+            if (window.Prism) {
+                Prism.highlightElement(htmlPreviewCode);
+            }
+
+            // Actualizar contadores
+            updateCounters(rawMarkdown);
+        }
+
+        // Actualizar estadísticas de texto
+        function updateCounters(text) {
+            const charCount = text.length;
+            const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+            document.getElementById('char-count').textContent = `${charCount} caracteres`;
+            document.getElementById('word-count').textContent = `${words} palabras`;
+        }
+
+        // Cambiar modo de Vista (Dividida / Triple)
+        function setViewMode(mode) {
+            currentViewMode = mode;
+            const btnSplit = document.getElementById('btn-view-split');
+            const btnTriple = document.getElementById('btn-view-triple');
+
+            if (mode === 'split') {
+                panelsContainer.className = "grid grid-cols-1 md:grid-cols-2 gap-4 h-full";
+                htmlPanel.classList.add('hidden');
+                htmlPanel.classList.remove('flex');
+                
+                // Botones estilo activo
+                btnSplit.className = "px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all bg-white dark:bg-slate-800 shadow-sm text-brand-600 dark:text-brand-400";
+                btnTriple.className = "px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white";
+            } else {
+                panelsContainer.className = "grid grid-cols-1 md:grid-cols-3 gap-4 h-full";
+                htmlPanel.classList.remove('hidden');
+                htmlPanel.classList.add('flex');
+
+                // Botones estilo activo
+                btnTriple.className = "px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all bg-white dark:bg-slate-800 shadow-sm text-brand-600 dark:text-brand-400";
+                btnSplit.className = "px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white";
+            }
+        }
+
+        // Insertar sintaxis desde la barra de herramientas
+        function insertFormat(type) {
+            const start = markdownInput.selectionStart;
+            const end = markdownInput.selectionEnd;
+            const text = markdownInput.value;
+            const selectedText = text.substring(start, end);
+
+            let before = "";
+            let after = "";
+            let defaultText = "";
+
+            switch (type) {
+                case 'bold':
+                    before = "**"; after = "**"; defaultText = "texto en negrita";
+                    break;
+                case 'italic':
+                    before = "*"; after = "*"; defaultText = "texto en cursiva";
+                    break;
+                case 'strikethrough':
+                    before = "~~"; after = "~~"; defaultText = "texto tachado";
+                    break;
+                case 'h1':
+                    before = "# "; defaultText = "Encabezado 1";
+                    break;
+                case 'h2':
+                    before = "## "; defaultText = "Encabezado 2";
+                    break;
+                case 'h3':
+                    before = "### "; defaultText = "Encabezado 3";
+                    break;
+                case 'link':
+                    before = "["; after = "](https://ejemplo.com)"; defaultText = "texto del enlace";
+                    break;
+                case 'quote':
+                    before = "> "; defaultText = "Cita o frase destacada";
+                    break;
+                case 'code':
+                    before = "```\n"; after = "\n```"; defaultText = "// Tu código aquí";
+                    break;
+                case 'ul':
+                    before = "- "; defaultText = "Elemento de lista";
+                    break;
+                case 'ol':
+                    before = "1. "; defaultText = "Primer elemento";
+                    break;
+                case 'table':
+                    before = "\n| Encabezado 1 | Encabezado 2 |\n| --- | --- |\n| Fila 1 | Dato 1 |\n| Fila 2 | Dato 2 |\n";
+                    break;
+            }
+
+            const insertText = selectedText || defaultText;
+            markdownInput.value = text.substring(0, start) + before + insertText + after + text.substring(end);
+            
+            // Posicionar cursor
+            markdownInput.focus();
+            markdownInput.setSelectionRange(start + before.length, start + before.length + insertText.length);
+
+            updatePreview();
+        }
+
+        // Cargar Plantilla
+        function loadTemplate(key) {
+            if (templates[key]) {
+                markdownInput.value = templates[key];
+                updatePreview();
+                showToast(`Plantilla "${key}" cargada correctamente`);
+            }
+        }
+
+        // Sincronización de desplazamiento entre paneles
+        function setupScrollSync() {
+            let isSyncingInput = false;
+            let isSyncingPreview = false;
+
+            markdownInput.addEventListener('scroll', () => {
+                if (!syncScrollToggle.checked) return;
+                if (!isSyncingInput) {
+                    isSyncingPreview = true;
+                    const percentage = markdownInput.scrollTop / (markdownInput.scrollHeight - markdownInput.clientHeight);
+                    visualPreviewContainer.scrollTop = percentage * (visualPreviewContainer.scrollHeight - visualPreviewContainer.clientHeight);
+                    htmlContainer.scrollTop = percentage * (htmlContainer.scrollHeight - htmlContainer.clientHeight);
+                }
+                isSyncingInput = false;
+            });
+
+            visualPreviewContainer.addEventListener('scroll', () => {
+                if (!syncScrollToggle.checked) return;
+                if (!isSyncingPreview) {
+                    isSyncingInput = true;
+                    const percentage = visualPreviewContainer.scrollTop / (visualPreviewContainer.scrollHeight - visualPreviewContainer.clientHeight);
+                    markdownInput.scrollTop = percentage * (markdownInput.scrollHeight - markdownInput.clientHeight);
+                    htmlContainer.scrollTop = percentage * (htmlContainer.scrollHeight - htmlContainer.clientHeight);
+                }
+                isSyncingPreview = false;
+            });
+        }
+
+        // Alternar modo oscuro / claro
+        function toggleDarkMode() {
+            document.documentElement.classList.toggle('dark');
+        }
+
+        // Mostrar Toast emergente
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            toastMessage.textContent = message;
+            
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 2500);
+        }
+
+        // Copiar texto genérico
+        function copyToClipboard(text, label) {
+            // Usar execCommand fallback seguro para evitar problemas de iframe
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+
+            showToast(`${label} copiado al portapapeles`);
+        }
+
+        // Copiar Formato Enriquecido
+        function copyRichText() {
+            const range = document.createRange();
+            range.selectNode(visualPreviewContainer);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            document.execCommand('copy');
+            window.getSelection().removeAllRanges();
+
+            showToast("Texto enriquecido copiado al portapapeles");
+        }
+    </script>
+</body>
+</html>
